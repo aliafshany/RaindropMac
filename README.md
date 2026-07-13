@@ -57,26 +57,106 @@ The app is **ad-hoc signed** for distribution outside the Mac App Store. It is n
 
 ---
 
-## Setup (API keys)
+## How the API works (and what you type in)
 
-Raindrop requires your own OAuth app credentials:
+RaindropMac does **not** ship with a shared Raindrop app key. Each user creates their own OAuth “app” on Raindrop, then pastes two values into this Mac client. After that, the app opens a normal Raindrop login page in your browser, receives a short-lived code on `localhost`, and exchanges it for an access token. Bookmarks, collections, tags, and the rest go through Raindrop’s public REST API using that token.
 
-1. Open [Raindrop → Settings → Integrations](https://app.raindrop.io/settings/integrations)  
-2. Create a new app / integration  
-3. Set the redirect URI to:
+You do **not** need to call the API by hand or write code — only fill in the fields below once.
 
-   ```text
-   http://localhost:54321/auth/callback
-   ```
+### What you will enter (inputs)
 
-4. In RaindropMac → **Settings → Account**, paste **Client ID** and **Client Secret**  
-5. Sign in with the button on the login screen  
+| Where | Field | What it is | Example shape |
+|-------|--------|------------|----------------|
+| Raindrop website | **Name** (of the integration) | Any label for yourself | `RaindropMac` |
+| Raindrop website | **Redirect URI** / callback URL | Must match the app **exactly** | `http://localhost:54321/auth/callback` |
+| RaindropMac → Settings → Account | **Client ID** | Public ID of your integration | long hex string |
+| RaindropMac → Settings → Account | **Client Secret** | Private secret of your integration | UUID-like string |
 
-Your secrets stay **only on your Mac** (app preferences). They are **never** committed to this repository, included in source, or baked into the DMG. Use **Settings → Account → Clear credentials & sign out** to wipe them locally anytime.
+Nothing else is required for first login (no API base URL, no custom scopes form in the app).
 
-If a Client ID/Secret was ever shared by accident, rotate it in [Raindrop Integrations](https://app.raindrop.io/settings/integrations).
+**Redirect URI (copy exactly — no trailing slash, no `https`):**
+
+```text
+http://localhost:54321/auth/callback
+```
+
+That URI is fixed in the app. If it does not match what you registered on Raindrop, sign-in will fail after you approve access in the browser.
+
+### Step-by-step: create API credentials on Raindrop
+
+1. Sign in to Raindrop in a browser: [https://app.raindrop.io](https://app.raindrop.io)  
+2. Open **[Settings → Integrations](https://app.raindrop.io/settings/integrations)**  
+3. Create a **new application / integration** (wording may be “Create new app”, “For developers”, or similar)  
+4. Fill in:
+   - **Name:** e.g. `RaindropMac` (only for your reference)  
+   - **Redirect URI / Callback URL:**  
+     `http://localhost:54321/auth/callback`  
+5. Save / create the integration  
+6. Raindrop shows you two values — copy them somewhere temporary (password manager is fine):
+   - **Client ID**  
+   - **Client Secret**  
+
+Official API overview (optional reading): [https://developer.raindrop.io](https://developer.raindrop.io)
+
+### Step-by-step: paste them into RaindropMac
+
+1. Open **RaindropMac**  
+2. Open **Settings** (macOS menu **RaindropMac → Settings…**, or `⌘,`)  
+3. Open the **Account** tab  
+4. Paste:
+   - **Client ID** → into the **Client ID** field  
+   - **Client Secret** → into the **Client Secret** field  
+5. Close Settings  
+6. On the login screen, click **Sign in with Raindrop** (or the main connect button)  
+7. Your browser opens Raindrop’s authorize page — approve the app  
+8. Raindrop redirects to `localhost:54321…`; the app catches that and finishes login  
+9. You should land in your library (All / collections / etc.)
+
+If the Sign in button stays disabled, the **Client ID** field is still empty — paste it first.
+
+### What happens under the hood (simple version)
+
+```text
+You paste Client ID + Secret
+        ↓
+App opens:  raindrop.io/oauth/authorize?client_id=…&redirect_uri=…
+        ↓
+You log in / allow access in the browser
+        ↓
+Browser hits:  http://localhost:54321/auth/callback?code=…
+        ↓
+App exchanges code + Client Secret for access_token (and refresh_token)
+        ↓
+App calls Raindrop REST API with Authorization: Bearer <token>
+```
+
+After that, normal use (add bookmark, move collection, tags, Quick Save, etc.) is just the app talking to Raindrop’s API as **you**. No extra API keys per feature.
+
+### Security (read this)
+
+| Do | Don’t |
+|----|--------|
+| Keep Client Secret only on your Mac | Commit ID/secret to Git, screenshots, or issues |
+| Use **Clear credentials & sign out** if this Mac is shared | Put secrets in the README or release notes |
+| Create your **own** integration | Share someone else’s Client Secret |
+
+- Credentials and tokens live in **this Mac’s app preferences** only.  
+- They are **not** in this GitHub repo, not in source, and **not** baked into the DMG.  
+- Settings → Account → **Clear credentials & sign out** wipes Client ID, Client Secret, and tokens.  
+- If a secret ever leaked, **rotate / recreate** the integration on [Raindrop Integrations](https://app.raindrop.io/settings/integrations) and paste the new pair.
+
+### Troubleshooting login
+
+| Symptom | What to check |
+|---------|----------------|
+| Sign in button disabled | Client ID empty in Settings → Account |
+| Browser says redirect mismatch | Redirect URI must be exactly `http://localhost:54321/auth/callback` |
+| Browser opens but app stays logged out | App must be running; nothing else should bind port **54321** |
+| “Invalid client” / token error | Wrong Client Secret, or integration was deleted — recreate and re-paste |
+| Need a fresh start | Settings → Account → **Clear credentials & sign out**, then re-enter ID/secret |
 
 ---
+
 
 ## Build from source
 
