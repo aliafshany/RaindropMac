@@ -72,7 +72,9 @@ Raindrop requires your own OAuth app credentials:
 4. In RaindropMac → **Settings → Account**, paste **Client ID** and **Client Secret**  
 5. Sign in with the button on the login screen  
 
-Your secrets stay on your Mac (UserDefaults). They are not uploaded to this GitHub project.
+Your secrets stay **only on your Mac** (app preferences). They are **never** committed to this repository, included in source, or baked into the DMG. Use **Settings → Account → Clear credentials & sign out** to wipe them locally anytime.
+
+If a Client ID/Secret was ever shared by accident, rotate it in [Raindrop Integrations](https://app.raindrop.io/settings/integrations).
 
 ---
 

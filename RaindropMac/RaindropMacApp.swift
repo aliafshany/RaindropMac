@@ -123,6 +123,7 @@ struct RaindropMacApp: App {
         Settings {
             SettingsView()
                 .environmentObject(viewModel)
+                .environmentObject(authService)
         }
         #endif
     }
@@ -132,6 +133,7 @@ struct RaindropMacApp: App {
 // MARK: - Settings
 struct SettingsView: View {
     @EnvironmentObject var viewModel: AppViewModel
+    @EnvironmentObject var authService: AuthService
     @AppStorage("client_id") private var clientId = ""
     @AppStorage("client_secret") private var clientSecret = ""
     @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.system.rawValue
@@ -167,16 +169,32 @@ struct SettingsView: View {
 
                     TextField("Client ID", text: $clientId)
                         .textFieldStyle(.roundedBorder)
+                        .textContentType(.username)
+                        .privacySensitive()
 
                     SecureField("Client Secret", text: $clientSecret)
                         .textFieldStyle(.roundedBorder)
+                        .textContentType(.password)
+                        .privacySensitive()
+
+                    Text("Stored only on this Mac in app preferences — never committed to GitHub.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    Button(role: .destructive) {
+                        clientId = ""
+                        clientSecret = ""
+                        authService.clearAllCredentials()
+                    } label: {
+                        Label("Clear credentials & sign out", systemImage: "trash")
+                    }
                 } header: {
                     Text("API Credentials")
                 }
             }
             .formStyle(.grouped)
             .padding(12)
-            .frame(width: 380, height: 300)
+            .frame(width: 380, height: 360)
             .tabItem { Label("Account", systemImage: "key.fill") }
 
             Form {

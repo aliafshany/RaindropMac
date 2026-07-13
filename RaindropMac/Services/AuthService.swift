@@ -184,11 +184,6 @@ class AuthService: ObservableObject {
                 return
             }
             
-            // Debug: print raw response
-            if let rawString = String(data: data, encoding: .utf8) {
-                print("Token response: \(rawString)")
-            }
-            
             do {
                 let response = try JSONDecoder().decode(TokenResponse.self, from: data)
                 DispatchQueue.main.async {
@@ -220,5 +215,14 @@ class AuthService: ObservableObject {
         UserDefaults.standard.removeObject(forKey: keychainKey)
         UserDefaults.standard.removeObject(forKey: refreshKey)
         isAuthenticated = false
+    }
+
+    /// Wipe OAuth app credentials + tokens from this Mac (never ship secrets in the repo).
+    func clearAllCredentials() {
+        signOut()
+        UserDefaults.standard.removeObject(forKey: "client_id")
+        UserDefaults.standard.removeObject(forKey: "client_secret")
+        // Force AppStorage / Settings fields to refresh if already open
+        UserDefaults.standard.synchronize()
     }
 }
