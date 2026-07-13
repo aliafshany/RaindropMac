@@ -147,6 +147,21 @@ struct Raindrop: Codable, Identifiable, Hashable {
         domain ?? URL(string: link)?.host ?? link
     }
 
+    /// Prefer `cover`, fall back to first media image so list thumbnails aren't empty.
+    var coverURL: URL? {
+        if let cover, !cover.isEmpty, let url = URL(string: cover) {
+            return url
+        }
+        if let media {
+            for item in media {
+                if let link = item.link, !link.isEmpty, let url = URL(string: link) {
+                    return url
+                }
+            }
+        }
+        return nil
+    }
+
     var typeIcon: String {
         switch type {
         case "image": return "photo"
@@ -290,6 +305,70 @@ struct SuggestItem: Codable {
     let tags: [String]?
 }
 
+// MARK: - Appearance
+enum AppAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .system: return "circle.lefthalf.filled"
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        }
+    }
+
+    /// nil = follow macOS
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
+// MARK: - Special filters (broken / duplicates)
+enum SpecialFilter: String, Identifiable, CaseIterable {
+    case broken
+    case duplicates
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .broken: return "Broken links"
+        case .duplicates: return "Duplicates"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .broken: return "link.badge.plus"
+        case .duplicates: return "doc.on.doc"
+        }
+    }
+
+    /// Raindrop search tokens
+    var searchToken: String {
+        switch self {
+        case .broken: return "⚠️"
+        case .duplicates: return "duplicate:true"
+        }
+    }
+}
+
 // MARK: - App enums
 enum ViewMode: String, CaseIterable, Identifiable {
     case list, headlines, grid, masonry
@@ -363,6 +442,17 @@ enum SystemCollection: Int, CaseIterable, Identifiable {
         case .trash: return "Trash"
         case .favorites: return "Favorites"
         case .stella: return "Ask Stella"
+        }
+    }
+
+    /// Short label for chips / compact chrome
+    var shortTitle: String {
+        switch self {
+        case .all: return "All"
+        case .unsorted: return "Inbox"
+        case .trash: return "Trash"
+        case .favorites: return "Stars"
+        case .stella: return "Stella"
         }
     }
 

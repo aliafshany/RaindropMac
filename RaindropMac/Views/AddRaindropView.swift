@@ -9,6 +9,15 @@ struct AddEditRaindropView: View {
 
     let raindropToEdit: Raindrop?
 
+    private func close() {
+        if raindropToEdit != nil {
+            viewModel.editingRaindrop = nil
+        } else {
+            viewModel.showAddSheet = false
+        }
+        dismiss()
+    }
+
     @State private var url = ""
     @State private var title = ""
     @State private var tagsText = ""
@@ -26,24 +35,19 @@ struct AddEditRaindropView: View {
         VStack(spacing: 0) {
             // Header
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isEditing ? "Edit Bookmark" : "Add Bookmark")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                    Text(isEditing ? "Update details, tags, and notes" : "Save a link to your library")
-                        .font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isEditing ? "Edit drop" : "New drop")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                    Text(isEditing ? "Tweak details" : "Save a link")
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.quaternary)
-                }
-                .buttonStyle(.plain)
+                ModalCloseButton { close() }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
 
             Divider()
 
@@ -149,30 +153,31 @@ struct AddEditRaindropView: View {
                     .toggleStyle(.switch)
                     .tint(.yellow)
                 }
-                .padding(24)
+                .padding(16)
             }
 
             Divider()
 
-            HStack(spacing: 12) {
-                Button("Cancel") { dismiss() }
+            HStack(spacing: 10) {
+                Button("Cancel") { close() }
                     .keyboardShortcut(.escape)
+                    .controlSize(.small)
 
                 Spacer()
 
                 Button { saveBookmark() } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         if isProcessing {
-                            ProgressView().controlSize(.small)
+                            ProgressView().controlSize(.mini)
                         } else {
                             Image(systemName: isEditing ? "checkmark.circle.fill" : "plus.circle.fill")
                         }
-                        Text(isProcessing ? "Saving…" : (isEditing ? "Save Changes" : "Add Bookmark"))
-                            .font(.system(size: 13, weight: .semibold))
+                        Text(isProcessing ? "Saving…" : (isEditing ? "Save" : "Add"))
+                            .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 9)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
                     .background(
                         LinearGradient(
                             colors: [Theme.accent, Theme.accentSecondary],
@@ -180,18 +185,21 @@ struct AddEditRaindropView: View {
                             endPoint: .trailing
                         )
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: Theme.accent.opacity(url.isEmpty ? 0 : 0.28), radius: 6, y: 2)
                     .opacity(url.isEmpty ? 0.5 : 1)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .disabled(url.isEmpty || isProcessing)
                 .keyboardShortcut(.return, modifiers: .command)
+                .animation(Theme.snappy, value: url.isEmpty)
+                .animation(Theme.snappy, value: isProcessing)
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
-        .frame(width: 460, height: 560)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.windowBackground)
         .onAppear {
             if let raindrop = raindropToEdit {
                 url = raindrop.link
@@ -271,7 +279,7 @@ struct AddEditRaindropView: View {
                 )
             }
             isProcessing = false
-            dismiss()
+            close()
         }
     }
 }
@@ -282,6 +290,8 @@ struct FormField<Content: View>: View {
     let systemImage: String
     let isRequired: Bool
     var hasError: Bool = false
+    /// Keep long URLs on one line (default true for link fields)
+    var singleLine: Bool = true
     @ViewBuilder let content: Content
 
     var body: some View {
@@ -303,10 +313,14 @@ struct FormField<Content: View>: View {
                     .font(.system(size: 13))
                     .foregroundStyle(hasError ? .red : .secondary)
                     .frame(width: 16)
+                    .fixedSize()
                 content
+                    .lineLimit(singleLine ? 1 : nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(

@@ -28,10 +28,64 @@ class AppViewModel: ObservableObject {
     @Published var stellaContextRaindropId: Int? = nil
     @Published var totalCount = 0
 
+    // Selection / bulk
+    @Published var isSelecting = false
+    @Published var selectedIds: Set<Int> = []
+    @Published var isBulkWorking = false
+
+    // Sheets / tools
+    @Published var showQuickSave = false
+    @Published var showTagsManager = false
+    @Published var showImportExport = false
+    @Published var readerRaindrop: Raindrop?
+    @Published var specialFilter: SpecialFilter?
+
+    /// Close every floating panel so only one modal is open at a time.
+    func closeAllModals() {
+        showQuickSave = false
+        showAddSheet = false
+        showTagsManager = false
+        showImportExport = false
+        showNewCollectionSheet = false
+        editingRaindrop = nil
+        readerRaindrop = nil
+    }
+
+    func openQuickSave() {
+        closeAllModals()
+        showQuickSave = true
+    }
+
+    func openAddSheet() {
+        closeAllModals()
+        showAddSheet = true
+    }
+
+    func openTagsManager() {
+        closeAllModals()
+        showTagsManager = true
+    }
+
+    func openImportExport() {
+        closeAllModals()
+        showImportExport = true
+    }
+
+    func openReader(_ raindrop: Raindrop) {
+        closeAllModals()
+        readerRaindrop = raindrop
+    }
+
+    func openEditor(_ raindrop: Raindrop) {
+        closeAllModals()
+        editingRaindrop = raindrop
+    }
+
     // View & filter state
     @Published var viewMode: ViewMode = {
         if let raw = UserDefaults.standard.string(forKey: "viewMode"),
            let mode = ViewMode(rawValue: raw) { return mode }
+        // List shows cover thumbnails; better use of space than headlines
         return .list
     }() {
         didSet { UserDefaults.standard.set(viewMode.rawValue, forKey: "viewMode") }
@@ -43,27 +97,42 @@ class AppViewModel: ObservableObject {
         return .newest
     }() {
         didSet {
+            guard oldValue != sortOption else { return }
             UserDefaults.standard.set(sortOption.rawValue, forKey: "sortOption")
-            Task { await reloadCurrent() }
+            scheduleReload()
         }
     }
 
     @Published var selectedTag: String? = nil {
-        didSet { Task { await reloadCurrent() } }
+        didSet {
+            guard oldValue != selectedTag else { return }
+            scheduleReload()
+        }
     }
     @Published var selectedType: String? = nil {
-        didSet { Task { await reloadCurrent() } }
+        didSet {
+            guard oldValue != selectedType else { return }
+            scheduleReload()
+        }
     }
     @Published var showImportantOnly = false {
-        didSet { Task { await reloadCurrent() } }
+        didSet {
+            guard oldValue != showImportantOnly else { return }
+            scheduleReload()
+        }
     }
     @Published var showNoTagsOnly = false {
-        didSet { Task { await reloadCurrent() } }
+        didSet {
+            guard oldValue != showNoTagsOnly else { return }
+            scheduleReload()
+        }
     }
 
     private var currentPage = 0
     private var cancellables = Set<AnyCancellable>()
-    private var searchTask: Task<Void, Never>?
+    private var reloadTask: Task<Void, Never>?
+    /// Coalesce rapid filter/sort changes into one network call
+    private var reloadGeneration = 0
 
     init() {
         setupSearchDebounce()
@@ -71,12 +140,22 @@ class AppViewModel: ObservableObject {
 
     private func setupSearchDebounce() {
         $searchQuery
-            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
+            .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
             .removeDuplicates()
             .sink { [weak self] _ in
-                Task { await self?.reloadCurrent() }
+                self?.scheduleReload()
             }
             .store(in: &cancellables)
+    }
+
+    /// Debounce reloads so toggling filters quickly doesn't spam the API.
+    private func scheduleReload() {
+        reloadTask?.cancel()
+        reloadTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 80_000_000)
+            guard !Task.isCancelled else { return }
+            await reloadCurrent()
+        }
     }
 
     // MARK: - Computed
@@ -106,7 +185,12 @@ class AppViewModel: ObservableObject {
     var favoritesCount: Int { filters?.important?.count ?? 0 }
 
     var hasActiveFilters: Bool {
-        selectedTag != nil || selectedType != nil || showImportantOnly || showNoTagsOnly || !searchQuery.isEmpty
+        selectedTag != nil || selectedType != nil || showImportantOnly || showNoTagsOnly
+            || !searchQuery.isEmpty || specialFilter != nil
+    }
+
+    var selectedRaindrops: [Raindrop] {
+        raindrops.filter { selectedIds.contains($0.id) }
     }
 
     // MARK: - Search query composition
@@ -120,6 +204,9 @@ class AppViewModel: ObservableObject {
         if showNoTagsOnly { parts.append("notag:true") }
         if selectedCollectionId == SystemCollection.favorites.rawValue && !showImportantOnly {
             parts.append("❤️")
+        }
+        if let specialFilter {
+            parts.append(specialFilter.searchToken)
         }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
@@ -193,6 +280,265 @@ class AppViewModel: ObservableObject {
         selectedType = nil
         showImportantOnly = false
         showNoTagsOnly = false
+        specialFilter = nil
+    }
+
+    func applySpecialFilter(_ filter: SpecialFilter?) {
+        specialFilter = filter
+        Task { await reloadCurrent() }
+    }
+
+    // MARK: - Selection
+    func toggleSelecting() {
+        isSelecting.toggle()
+        if !isSelecting { selectedIds.removeAll() }
+    }
+
+    func toggleSelection(_ id: Int) {
+        if selectedIds.contains(id) {
+            selectedIds.remove(id)
+        } else {
+            selectedIds.insert(id)
+        }
+    }
+
+    func selectAllVisible() {
+        selectedIds = Set(raindrops.map(\.id))
+    }
+
+    func clearSelection() {
+        selectedIds.removeAll()
+    }
+
+    // MARK: - Bulk actions
+    func bulkMove(to collectionId: Int) async {
+        let ids = Array(selectedIds)
+        guard !ids.isEmpty else { return }
+        isBulkWorking = true
+        do {
+            try await APIService.shared.bulkUpdateRaindrops(ids: ids, collectionId: collectionId)
+            if selectedCollectionId > 0 && selectedCollectionId != collectionId {
+                raindrops.removeAll { selectedIds.contains($0.id) }
+                totalCount = max(0, totalCount - ids.count)
+            }
+            clearSelection()
+            isSelecting = false
+            await reloadCurrent()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isBulkWorking = false
+    }
+
+    func bulkSetFavorite(_ important: Bool) async {
+        let ids = Array(selectedIds)
+        guard !ids.isEmpty else { return }
+        isBulkWorking = true
+        do {
+            try await APIService.shared.bulkUpdateRaindrops(ids: ids, important: important)
+            for i in raindrops.indices where selectedIds.contains(raindrops[i].id) {
+                raindrops[i] = raindrops[i].with(important: important)
+            }
+            if selectedCollectionId == SystemCollection.favorites.rawValue && !important {
+                raindrops.removeAll { selectedIds.contains($0.id) }
+            }
+            clearSelection()
+            isSelecting = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isBulkWorking = false
+    }
+
+    func bulkAddTags(_ tags: [String]) async {
+        let ids = Array(selectedIds)
+        guard !ids.isEmpty, !tags.isEmpty else { return }
+        isBulkWorking = true
+        do {
+            // Raindrop bulk tags typically replace; merge per-item for safety
+            for id in ids {
+                if let item = raindrops.first(where: { $0.id == id }) {
+                    let merged = Array(Set((item.tags ?? []) + tags)).sorted()
+                    let updated = try await APIService.shared.updateRaindrop(id: id, tags: merged)
+                    if let idx = raindrops.firstIndex(where: { $0.id == id }) {
+                        raindrops[idx] = updated
+                    }
+                } else {
+                    try await APIService.shared.updateRaindrop(id: id, tags: tags)
+                }
+            }
+            await loadTagsAndFilters()
+            clearSelection()
+            isSelecting = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isBulkWorking = false
+    }
+
+    func bulkDelete() async {
+        let ids = Array(selectedIds)
+        guard !ids.isEmpty else { return }
+        isBulkWorking = true
+        do {
+            try await APIService.shared.bulkDeleteRaindrops(ids: ids)
+            raindrops.removeAll { selectedIds.contains($0.id) }
+            totalCount = max(0, totalCount - ids.count)
+            clearSelection()
+            isSelecting = false
+        } catch {
+            // Fallback: delete one by one
+            for id in ids {
+                try? await APIService.shared.deleteRaindrop(id: id)
+            }
+            raindrops.removeAll { ids.contains($0.id) }
+            clearSelection()
+            isSelecting = false
+        }
+        isBulkWorking = false
+    }
+
+    // MARK: - Tags management
+    func renameTag(from old: String, to new: String) async {
+        do {
+            try await APIService.shared.renameTag(old: old, new: new)
+            if selectedTag == old { selectedTag = new }
+            await loadTagsAndFilters()
+            await reloadCurrent()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func deleteTag(_ tag: String) async {
+        do {
+            try await APIService.shared.deleteTags([tag])
+            if selectedTag == tag { selectedTag = nil }
+            await loadTagsAndFilters()
+            await reloadCurrent()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Collection settings
+    func updateCollectionSettings(_ collection: RaindropCollection, title: String, isPublic: Bool) async {
+        do {
+            let updated = try await APIService.shared.updateCollection(
+                id: collection.id,
+                title: title,
+                isPublic: isPublic
+            )
+            if let idx = collections.firstIndex(where: { $0.id == collection.id }) {
+                collections[idx] = updated
+            }
+            if selectedCollection?.id == collection.id {
+                selectedCollection = updated
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Export / Import
+    func exportLibraryCSV() async -> URL? {
+        do {
+            let items = try await APIService.shared.fetchAllRaindrops(collectionId: 0)
+            var csv = "id,title,link,domain,tags,important,created,note\n"
+            for r in items {
+                let tags = (r.tags ?? []).joined(separator: "|")
+                let title = r.title.replacingOccurrences(of: "\"", with: "\"\"")
+                let note = (r.note ?? "").replacingOccurrences(of: "\"", with: "\"\"")
+                csv += "\(r.id),\"\(title)\",\"\(r.link)\",\"\(r.displayDomain)\",\"\(tags)\",\(r.important == true),\"\(r.created ?? "")\",\"\(note)\"\n"
+            }
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("raindrop-export.csv")
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func exportLibraryHTML() async -> URL? {
+        do {
+            let items = try await APIService.shared.fetchAllRaindrops(collectionId: 0)
+            var html = """
+            <!DOCTYPE NETSCAPE-Bookmark-file-1>
+            <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">
+            <TITLE>Raindrop Export</TITLE>
+            <H1>Raindrop Export</H1>
+            <DL><p>
+            """
+            for r in items {
+                let title = r.displayTitle
+                    .replacingOccurrences(of: "&", with: "&amp;")
+                    .replacingOccurrences(of: "\"", with: "&quot;")
+                html += "<DT><A HREF=\"\(r.link)\">\(title)</A>\n"
+            }
+            html += "</DL><p>\n"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("raindrop-export.html")
+            try html.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func importBookmarks(from url: URL) async -> Int {
+        guard let data = try? String(contentsOf: url, encoding: .utf8) else {
+            errorMessage = "Could not read file."
+            return 0
+        }
+        var links: [(url: String, title: String?)] = []
+
+        // HTML bookmarks: HREF="..."
+        let hrefPattern = #"<A[^>]+HREF="([^"]+)"[^>]*>([^<]*)</A>"#
+        if let regex = try? NSRegularExpression(pattern: hrefPattern, options: .caseInsensitive) {
+            let range = NSRange(data.startIndex..., in: data)
+            regex.enumerateMatches(in: data, options: [], range: range) { match, _, _ in
+                guard let match, match.numberOfRanges >= 3,
+                      let urlR = Range(match.range(at: 1), in: data),
+                      let titleR = Range(match.range(at: 2), in: data) else { return }
+                let link = String(data[urlR])
+                let title = String(data[titleR])
+                if link.hasPrefix("http") {
+                    links.append((link, title.isEmpty ? nil : title))
+                }
+            }
+        }
+
+        // Plain text / CSV: one URL per line
+        if links.isEmpty {
+            for line in data.components(separatedBy: .newlines) {
+                let t = line.trimmingCharacters(in: .whitespaces)
+                if t.hasPrefix("http://") || t.hasPrefix("https://") {
+                    links.append((t, nil))
+                }
+            }
+        }
+
+        var imported = 0
+        let colId = selectedCollection?.id ?? -1
+        for item in links.prefix(200) { // safety cap
+            do {
+                _ = try await APIService.shared.createRaindrop(
+                    link: item.url,
+                    title: item.title,
+                    collectionId: colId,
+                    pleaseParse: true
+                )
+                imported += 1
+            } catch {
+                continue
+            }
+        }
+        if imported > 0 {
+            await reloadCurrent()
+            await loadTagsAndFilters()
+        }
+        return imported
     }
 
     // MARK: - Reload
@@ -203,23 +549,37 @@ class AppViewModel: ObservableObject {
             return
         }
 
+        reloadGeneration &+= 1
+        let gen = reloadGeneration
+
         isLoading = raindrops.isEmpty
         currentPage = 0
         isSearching = composedSearch != nil
 
+        let col = activeApiCollectionId
+        let sort = sortOption.rawValue
+        let search = composedSearch
+
         do {
             let response = try await APIService.shared.fetchRaindrops(
-                collectionId: activeApiCollectionId,
+                collectionId: col,
                 page: 0,
-                sort: sortOption.rawValue,
-                search: composedSearch
+                sort: sort,
+                search: search
             )
+            // Drop stale responses if user navigated again
+            guard gen == reloadGeneration else { return }
             raindrops = response.items
             totalCount = response.count
+        } catch is CancellationError {
+            return
         } catch {
+            guard gen == reloadGeneration else { return }
             errorMessage = error.localizedDescription
         }
-        isLoading = false
+        if gen == reloadGeneration {
+            isLoading = false
+        }
     }
 
     func loadNextPage() async {

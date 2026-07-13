@@ -265,4 +265,50 @@ class APIService {
         }
         return try await fetch(path)
     }
+
+    // MARK: - Bulk raindrops
+    /// Bulk update selected raindrops (move / favorite / tags merge).
+    func bulkUpdateRaindrops(
+        ids: [Int],
+        collectionId: Int? = nil,
+        important: Bool? = nil,
+        tags: [String]? = nil,
+        nested: Bool = true
+    ) async throws {
+        guard !ids.isEmpty else { return }
+        var body: [String: Any] = ["ids": ids]
+        if let collectionId { body["collection"] = ["$id": collectionId] }
+        if let important { body["important"] = important }
+        if let tags { body["tags"] = tags }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        // Target "all" collection endpoint for bulk ops
+        let _: DeleteResponse = try await fetch("/raindrops/0?nested=\(nested)", method: "PUT", body: data)
+    }
+
+    func bulkDeleteRaindrops(ids: [Int]) async throws {
+        guard !ids.isEmpty else { return }
+        let data = try JSONSerialization.data(withJSONObject: ["ids": ids])
+        let _: DeleteResponse = try await fetch("/raindrops/0", method: "DELETE", body: data)
+    }
+
+    /// Fetch all raindrops for export (paginated).
+    func fetchAllRaindrops(collectionId: Int = 0, search: String? = nil) async throws -> [Raindrop] {
+        var page = 0
+        var all: [Raindrop] = []
+        while true {
+            let resp = try await fetchRaindrops(
+                collectionId: collectionId,
+                page: page,
+                perPage: 50,
+                sort: "-created",
+                search: search,
+                nested: true
+            )
+            all.append(contentsOf: resp.items)
+            if all.count >= resp.count || resp.items.isEmpty { break }
+            page += 1
+            if page > 200 { break } // safety
+        }
+        return all
+    }
 }

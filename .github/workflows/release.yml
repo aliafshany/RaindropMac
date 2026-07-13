@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for the DMG (e.g. 1.1.0)"
+        required: false
+        default: "1.1.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ github.event.inputs.version }}"
+            V="${V:-1.1.0}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release
+        run: |
+          xcodebuild \
+            -project RaindropMac.xcodeproj \
+            -scheme RaindropMac \
+            -configuration Release \
+            -derivedDataPath build/DerivedDataRelease \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
+            MARKETING_VERSION="${{ steps.ver.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Package DMG
+        env:
+          MARKETING_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          chmod +x scripts/make-dmg.sh
+          ./scripts/make-dmg.sh
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DMG="dist/RaindropMac-${{ steps.ver.outputs.version }}.dmg"
+          TAG="${{ steps.ver.outputs.tag }}"
+          TITLE="RaindropMac ${{ steps.ver.outputs.version }}"
+          NOTES="$(cat <<'EOF'
+          ## RaindropMac — native SwiftUI client
+
+          Unofficial macOS app by **Ali Afshanisoumeeh** ([@aliafshany](https://github.com/aliafshany)).
+
+          ### Install
+          1. Download the `.dmg` below
+          2. Drag **RaindropMac** into Applications
+          3. On first open, right-click → Open if Gatekeeper blocks unsigned builds
+
+          ### Notes
+          - Requires your own Raindrop API credentials (Settings → Account)
+          - Not affiliated with the official Raindrop.io Electron app
+          - Redirect URI: `http://localhost:54321/auth/callback`
+          EOF
+          )"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$DMG" --clobber
+          else
+            gh release create "$TAG" "$DMG" \
+              --title "$TITLE" \
+              --notes "$NOTES"
+          fi

@@ -51,3 +51,8 @@ InjectionProject/
 # Distribution / packaging
 *.dmg
 dmg_root/
+
+# Release artifacts
+dist/
+*.dmg
+dmg_root/
