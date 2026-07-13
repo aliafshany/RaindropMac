@@ -11,6 +11,14 @@ This is **not** the official Electron desktop app. It is a from-scratch SwiftUI 
 
 > Official Raindrop products live at [raindrop.io](https://raindrop.io) and [github.com/raindropio](https://github.com/raindropio). This project is an independent, unofficial client.
 
+### Disclaimer — vibe coding, no warranty
+
+**This whole project was done by vibe coding.** It is an experimental, AI-assisted / informal build published as-is for fun and personal use.
+
+**We take no responsibility for anything** that happens if you download, run, or rely on this software — including but not limited to data loss, account issues, security problems, broken features, API misuse, Gatekeeper warnings, or anything else. Use at your own risk. No support is promised. If something breaks, you are on your own.
+
+By using RaindropMac you accept that the author(s) and contributors accept **no liability** of any kind.
+
 ---
 
 ## Why this exists
@@ -240,8 +248,10 @@ Raindrop.io, logos, and the service itself are trademarks of their respective ow
 
 ## License
 
-Source in this repository is provided under the **MIT License** (see [LICENSE](LICENSE)) unless noted otherwise.  
+Source in this repository is provided under the **MIT License** (see [LICENSE](LICENSE)) unless noted otherwise — which means **as-is, no warranty**.  
 Raindrop.io itself is a separate commercial product; use of their API is subject to their terms.
+
+Again: this app is a **vibe-coded** project. **No responsibility is taken for any outcome** of using it.
 
 ---
 
@@ -250,4 +260,4 @@ Raindrop.io itself is a separate commercial product; use of their API is subject
 **Ali Afshanisoumeeh**  
 GitHub: [@aliafshany](https://github.com/aliafshany)
 
-If this SwiftUI client helps you, a star on the repo is appreciated — and if you were looking for a native Mac alternative to the Electron app, you found it.
+If this SwiftUI client helps you, a star on the repo is appreciated — and if you were looking for a native Mac alternative to the Electron app, you found it. Use at your own risk.
