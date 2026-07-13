@@ -1,5 +1,5 @@
 // MainAppView.swift
-// Three-column layout: Sidebar | List | Detail
+// Sidebar + content layout (bookmarks 3-column, Stella 2-column full pane)
 
 import SwiftUI
 
@@ -9,22 +9,31 @@ struct MainAppView: View {
     @State private var selectedRaindrop: Raindrop?
     @State private var columnVisibility = NavigationSplitViewVisibility.all
 
+    private var isStella: Bool {
+        viewModel.selectedCollectionId == SystemCollection.stella.rawValue
+    }
+
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            // MARK: - Sidebar (Collections)
-            SidebarView()
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 280)
-        } content: {
-            // MARK: - Middle Column (Raindrops List)
-            RaindropsListView(selectedRaindrop: $selectedRaindrop)
-                .navigationSplitViewColumnWidth(min: 280, ideal: 340, max: 420)
-        } detail: {
-            // MARK: - Detail Column
-            if let raindrop = selectedRaindrop {
-                RaindropDetailView(raindrop: raindrop)
+        Group {
+            if isStella {
+                stellaLayout
             } else {
-                EmptyDetailView()
+                bookmarksLayout
             }
+        }
+        .onChange(of: viewModel.raindrops) { _, newValue in
+            if let selected = selectedRaindrop, !newValue.contains(where: { $0.id == selected.id }) {
+                selectedRaindrop = nil
+            }
+        }
+        .onChange(of: viewModel.selectedCollectionId) { _, newId in
+            selectedRaindrop = nil
+            if newId == SystemCollection.stella.rawValue {
+                columnVisibility = .all
+            }
+        }
+        .onChange(of: viewModel.selectedTag) { _, _ in
+            selectedRaindrop = nil
         }
         .sheet(isPresented: $viewModel.showAddSheet) {
             AddEditRaindropView(raindropToEdit: nil)
@@ -34,32 +43,70 @@ struct MainAppView: View {
             AddEditRaindropView(raindropToEdit: raindrop)
                 .environmentObject(viewModel)
         }
-        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .alert("Something went wrong", isPresented: Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
+        )) {
             Button("OK") { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .background(.ultraThinMaterial)
+    }
+
+    // MARK: - Bookmarks: Sidebar | List | Detail
+    private var bookmarksLayout: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView()
+                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
+        } content: {
+            RaindropsListView(selectedRaindrop: $selectedRaindrop)
+                .navigationSplitViewColumnWidth(min: 340, ideal: 420, max: 560)
+        } detail: {
+            if let selected = selectedRaindrop {
+                let live = viewModel.raindrops.first(where: { $0.id == selected.id }) ?? selected
+                RaindropDetailView(raindrop: live)
+            } else {
+                EmptyDetailView()
+            }
+        }
+    }
+
+    // MARK: - Stella: Sidebar | Full chat (no nested search / detail)
+    private var stellaLayout: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView()
+                .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 300)
+        } detail: {
+            StellaView(contextRaindropId: viewModel.stellaContextRaindropId)
+                .environmentObject(viewModel)
+                .navigationTitle("Stella")
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        Button {
+                            Task { await viewModel.selectSystem(.all) }
+                        } label: {
+                            Label("Library", systemImage: "bookmark.fill")
+                        }
+                        .help("Back to library")
+
+                        Button {
+                            viewModel.showAddSheet = true
+                        } label: {
+                            Label("Add", systemImage: "plus")
+                        }
+                        .help("Add bookmark (⌘N)")
+                    }
+                }
+        }
     }
 }
 
-// MARK: - Empty Detail State
 struct EmptyDetailView: View {
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "bookmark.slash")
-                .font(.system(size: 52))
-                .foregroundStyle(.tertiary)
-            Text("Select a Bookmark")
-                .font(.title3)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-            Text("Choose a raindrop from the list to view its details.")
-                .font(.callout)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.clear)
+        EmptyStateView(
+            icon: "bookmark",
+            title: "Select a bookmark",
+            message: "Choose an item from the list to preview details, notes, and highlights."
+        )
     }
 }

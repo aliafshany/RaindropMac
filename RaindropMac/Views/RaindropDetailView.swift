@@ -1,5 +1,5 @@
 // RaindropDetailView.swift
-// Detail panel for a selected bookmark
+// Polished detail panel for a selected bookmark
 
 import SwiftUI
 
@@ -7,51 +7,23 @@ struct RaindropDetailView: View {
     let raindrop: Raindrop
     @EnvironmentObject var viewModel: AppViewModel
     @State private var isHoveringOpen = false
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                coverHeader
 
-                // Cover image or gradient header
-                ZStack(alignment: .bottomLeading) {
-                    if let cover = raindrop.cover, !cover.isEmpty, let url = URL(string: cover) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 200)
-                                    .clipped()
-                            default:
-                                headerGradient
-                            }
-                        }
-                    } else {
-                        headerGradient
-                    }
-
-                    // Gradient overlay
-                    LinearGradient(
-                        colors: [.clear, Color(NSColor.windowBackgroundColor).opacity(0.9)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 80)
-                }
-
-                // Content
                 VStack(alignment: .leading, spacing: 20) {
-
-                    // Title + Favorite
-                    HStack(alignment: .top) {
-                        Text(raindrop.title.isEmpty ? "Untitled" : raindrop.title)
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                    // Title row
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(raindrop.displayTitle)
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundStyle(.primary)
-                            .lineLimit(3)
+                            .textSelection(.enabled)
+                            .lineLimit(4)
 
-                        Spacer()
+                        Spacer(minLength: 8)
 
                         Button {
                             Task { await viewModel.toggleFavorite(raindrop) }
@@ -59,292 +31,325 @@ struct RaindropDetailView: View {
                             Image(systemName: raindrop.important == true ? "star.fill" : "star")
                                 .font(.system(size: 18))
                                 .foregroundStyle(raindrop.important == true ? .yellow : .secondary)
+                                .frame(width: 36, height: 36)
+                                .background(Theme.subtleFill)
+                                .clipShape(Circle())
                         }
                         .buttonStyle(.plain)
                         .help(raindrop.important == true ? "Remove from favorites" : "Add to favorites")
                     }
 
-                    // Domain + Type badge
-                    HStack(spacing: 8) {
-                        Image(systemName: "globe")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-
-                        Text(raindrop.domain ?? extractDomain(from: raindrop.link))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-
+                    // Meta chips
+                    FlowLayout(spacing: 8) {
+                        metaChip(icon: "globe", text: raindrop.displayDomain)
                         if let type = raindrop.type, type != "link" {
-                            Text(type.capitalized)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.accentColor)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(Color.accentColor.opacity(0.12))
-                                .clipShape(Capsule())
+                            metaChip(icon: raindrop.typeIcon, text: type.capitalized, color: raindrop.typeColor)
+                        }
+                        if let col = viewModel.collectionTitle(for: raindrop) {
+                            metaChip(icon: "folder.fill", text: col)
+                        }
+                        if let created = raindrop.created {
+                            metaChip(icon: "calendar", text: Theme.formatDate(created))
                         }
                     }
 
-                    // Open in browser button
-                    Button {
-                        if let url = URL(string: raindrop.link) {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "safari")
-                                .font(.system(size: 13, weight: .semibold))
-                            Text("Open in Browser")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            LinearGradient(
-                                colors: [.accentColor, Color(red: 0.2, green: 0.3, blue: 0.95)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                    // Primary actions
+                    HStack(spacing: 10) {
+                        Button {
+                            viewModel.openInBrowser(raindrop)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "safari")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text("Open")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(
+                                LinearGradient(
+                                    colors: [Theme.accent, Theme.accentSecondary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
                             )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(color: .accentColor.opacity(isHoveringOpen ? 0.5 : 0.25), radius: isHoveringOpen ? 12 : 6)
-                        .scaleEffect(isHoveringOpen ? 1.01 : 1.0)
-                    }
-                    .buttonStyle(.plain)
-                    .onHover { h in
-                        withAnimation(.spring(response: 0.2)) { isHoveringOpen = h }
-                    }
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .shadow(color: Theme.accent.opacity(isHoveringOpen ? 0.45 : 0.22), radius: isHoveringOpen ? 12 : 6, y: 3)
+                            .scaleEffect(isHoveringOpen ? 1.01 : 1)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { h in
+                            withAnimation(.spring(response: 0.2)) { isHoveringOpen = h }
+                        }
 
-                    Divider()
+                        Button { viewModel.copyLink(raindrop) } label: {
+                            actionIcon("link")
+                        }
+                        .help("Copy link")
+                        .buttonStyle(.plain)
+
+                        Button { viewModel.editingRaindrop = raindrop } label: {
+                            actionIcon("pencil")
+                        }
+                        .help("Edit")
+                        .buttonStyle(.plain)
+
+                        Button {
+                            viewModel.stellaContextRaindropId = raindrop.id
+                            Task { await viewModel.selectSystem(.stella) }
+                        } label: {
+                            actionIcon("sparkles")
+                        }
+                        .help("Ask Stella about this")
+                        .buttonStyle(.plain)
+                    }
 
                     // Link
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Link", systemImage: "link")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-
+                    detailCard {
+                        SectionLabel(title: "Link", icon: "link")
                         Text(raindrop.link)
                             .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Color.accentColor)
-                            .lineLimit(2)
+                            .foregroundStyle(Theme.accent)
                             .textSelection(.enabled)
-                            .onTapGesture {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(raindrop.link, forType: .string)
-                            }
+                            .lineLimit(3)
+                            .onTapGesture { viewModel.copyLink(raindrop) }
                     }
 
-                    // Excerpt / Description
+                    // Excerpt
                     if let excerpt = raindrop.excerpt, !excerpt.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Description", systemImage: "text.alignleft")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
+                        detailCard {
+                            SectionLabel(title: "Description", icon: "text.alignleft")
                             Text(excerpt)
                                 .font(.system(size: 13))
-                                .foregroundStyle(.primary)
                                 .lineSpacing(4)
                                 .textSelection(.enabled)
+                                .foregroundStyle(.primary.opacity(0.9))
                         }
                     }
 
                     // Tags
                     if let tags = raindrop.tags, !tags.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Tags", systemImage: "tag")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-
+                        detailCard {
+                            SectionLabel(title: "Tags", icon: "tag")
                             FlowLayout(spacing: 6) {
                                 ForEach(tags, id: \.self) { tag in
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "tag.fill")
-                                            .font(.system(size: 9))
-                                        Text(tag)
-                                            .font(.system(size: 12, weight: .medium))
+                                    ModernChip(title: tag, icon: "number", color: Theme.accent) {
+                                        Task { await viewModel.selectTag(tag) }
                                     }
-                                    .foregroundStyle(Color.accentColor)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Color.accentColor.opacity(0.1))
-                                    .clipShape(Capsule())
                                 }
                             }
                         }
                     }
 
-                    // Pro Feature: Note
+                    // Note
                     if let note = raindrop.note, !note.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Note", systemImage: "note.text")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.orange)
-                                .textCase(.uppercase)
-                            
+                        detailCard(tint: .orange) {
+                            SectionLabel(title: "Note", icon: "note.text", color: .orange)
                             Text(note)
                                 .font(.system(size: 13))
-                                .foregroundStyle(.primary)
                                 .lineSpacing(4)
-                                .padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.orange.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .stroke(Color.orange.opacity(0.2), lineWidth: 1)
-                                )
+                                .textSelection(.enabled)
                         }
                     }
 
-                    // Pro Feature: Highlights
+                    // Highlights
                     if let highlights = raindrop.highlights, !highlights.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Label("Highlights (\(highlights.count))", systemImage: "highlighter")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.yellow)
-                                .textCase(.uppercase)
-                            
-                            ForEach(highlights) { highlight in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(highlight.text)
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(.primary)
-                                        .padding(.leading, 10)
-                                        .overlay(
-                                            Rectangle()
-                                                .fill(Color.yellow)
-                                                .frame(width: 3),
-                                            alignment: .leading
-                                        )
-                                    
-                                    if let hNote = highlight.note, !hNote.isEmpty {
-                                        Text(hNote)
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(.secondary)
+                        detailCard(tint: .yellow) {
+                            SectionLabel(title: "Highlights (\(highlights.count))", icon: "highlighter", color: .yellow)
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(highlights) { highlight in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(highlight.text)
+                                            .font(.system(size: 13, weight: .medium))
                                             .padding(.leading, 10)
+                                            .overlay(alignment: .leading) {
+                                                RoundedRectangle(cornerRadius: 2)
+                                                    .fill(highlightColor(highlight.color))
+                                                    .frame(width: 3)
+                                            }
+                                        if let hNote = highlight.note, !hNote.isEmpty {
+                                            Text(hNote)
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.secondary)
+                                                .padding(.leading, 10)
+                                        }
                                     }
                                 }
-                                .padding(.vertical, 4)
                             }
                         }
-                        .padding(.vertical, 4)
                     }
 
-                    // Pro Feature: Permanent Library (Cache)
+                    // Permanent library
                     if let cache = raindrop.cache, cache.status == "ready" {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Permanent Library", systemImage: "archivebox.fill")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.purple)
-                                .textCase(.uppercase)
-                            
+                        detailCard(tint: .purple) {
+                            SectionLabel(title: "Permanent Library", icon: "archivebox.fill", color: .purple)
                             Button {
                                 if let url = URL(string: "https://api.raindrop.io/rest/v1/raindrop/\(raindrop.id)/cache") {
                                     NSWorkspace.shared.open(url)
                                 }
                             } label: {
-                                HStack {
-                                    Image(systemName: "icloud.and.arrow.down")
-                                    Text("View Permanent Copy")
-                                        .fontWeight(.medium)
-                                }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(Color.purple.opacity(0.1))
-                                .foregroundStyle(.purple)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                Label("View permanent copy", systemImage: "icloud.and.arrow.down")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.purple)
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .background(Color.purple.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
                     }
 
-                    // Metadata
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("Details", systemImage: "info.circle")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-
-                        if let created = raindrop.created {
-                            MetadataRow(label: "Saved", value: formatDate(created))
+                    // Details
+                    detailCard {
+                        SectionLabel(title: "Details", icon: "info.circle")
+                        VStack(spacing: 8) {
+                            MetadataRow(label: "Saved", value: Theme.formatDate(raindrop.created))
+                            MetadataRow(label: "Updated", value: Theme.formatDate(raindrop.lastUpdate))
+                            MetadataRow(label: "ID", value: "\(raindrop.id)")
+                            if let type = raindrop.type {
+                                MetadataRow(label: "Type", value: type.capitalized)
+                            }
                         }
-                        if let updated = raindrop.lastUpdate {
-                            MetadataRow(label: "Updated", value: formatDate(updated))
-                        }
-                        MetadataRow(label: "ID", value: "\(raindrop.id)")
                     }
-                    .padding(.bottom, 20)
+
+                    // Danger zone
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label(
+                            viewModel.selectedCollectionId == -99 ? "Delete permanently" : "Move to Trash",
+                            systemImage: "trash"
+                        )
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.danger)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Theme.danger.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
             }
         }
         .background(Color.clear)
-        .navigationTitle("")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    viewModel.editingRaindrop = raindrop
-                } label: {
-                    Label("Edit", systemImage: "pencil")
-                }
-                .help("Edit bookmark")
+        .confirmationDialog(
+            viewModel.selectedCollectionId == -99 ? "Delete forever?" : "Move to Trash?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(viewModel.selectedCollectionId == -99 ? "Delete" : "Move to Trash", role: .destructive) {
+                Task { await viewModel.deleteRaindrop(raindrop) }
             }
-            ToolbarItem(placement: .destructiveAction) {
-                Button(role: .destructive) {
-                    Task { await viewModel.deleteRaindrop(raindrop) }
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                        .foregroundStyle(.red)
-                }
-                .help("Delete bookmark")
-            }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
-    // MARK: - Helpers
-    private var headerGradient: some View {
+    // MARK: - Cover
+    private var coverHeader: some View {
+        ZStack(alignment: .bottomLeading) {
+            if let cover = raindrop.cover, !cover.isEmpty, let url = URL(string: cover) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 210)
+                            .clipped()
+                    default:
+                        headerFallback
+                    }
+                }
+            } else {
+                headerFallback
+            }
+
+            LinearGradient(
+                colors: [.clear, Color(nsColor: .windowBackgroundColor).opacity(0.95)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 90)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+        }
+        .frame(height: 210)
+    }
+
+    private var headerFallback: some View {
         LinearGradient(
-            colors: [
-                Color.accentColor.opacity(0.15),
-                Color.accentColor.opacity(0.05)
-            ],
+            colors: [raindrop.typeColor.opacity(0.25), Theme.accentSecondary.opacity(0.12)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
         .frame(maxWidth: .infinity)
-        .frame(height: 180)
+        .frame(height: 210)
         .overlay {
-            Image(systemName: "bookmark.fill")
-                .font(.system(size: 60))
-                .foregroundStyle(Color.accentColor.opacity(0.3))
-                .shadow(color: Color.accentColor.opacity(0.2), radius: 10)
+            Image(systemName: raindrop.typeIcon)
+                .font(.system(size: 52, weight: .medium))
+                .foregroundStyle(raindrop.typeColor.opacity(0.35))
         }
     }
 
-    private func extractDomain(from urlString: String) -> String {
-        URL(string: urlString)?.host ?? urlString
+    // MARK: - Helpers
+    private func detailCard<Content: View>(tint: Color? = nil, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(tint?.opacity(0.07) ?? Theme.subtleFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke((tint ?? Color.primary).opacity(0.08), lineWidth: 1)
+        )
     }
 
-    private func formatDate(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: dateString) {
-            let display = DateFormatter()
-            display.dateStyle = .medium
-            display.timeStyle = .short
-            return display.string(from: date)
+    private func metaChip(icon: String, text: String, color: Color = .secondary) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
         }
-        return dateString
+        .foregroundStyle(color)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.1))
+        .clipShape(Capsule())
+    }
+
+    private func actionIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.primary.opacity(0.75))
+            .frame(width: 40, height: 40)
+            .background(Theme.subtleFill)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func highlightColor(_ color: String?) -> Color {
+        switch color {
+        case "yellow", "default", nil: return .yellow
+        case "blue": return .blue
+        case "green": return .green
+        case "red": return .red
+        case "orange": return .orange
+        case "purple": return .purple
+        default: return .yellow
+        }
     }
 }
 
-// MARK: - Metadata Row
 struct MetadataRow: View {
     let label: String
     let value: String
@@ -354,54 +359,12 @@ struct MetadataRow: View {
             Text(label)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
-                .frame(width: 65, alignment: .leading)
+                .frame(width: 72, alignment: .leading)
             Text(value)
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)
                 .textSelection(.enabled)
-        }
-    }
-}
-
-// MARK: - Simple Flow Layout
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var height: CGFloat = 0
-        var rowWidth: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if rowWidth + size.width > maxWidth && rowWidth > 0 {
-                height += rowHeight + spacing
-                rowWidth = 0
-                rowHeight = 0
-            }
-            rowWidth += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        height += rowHeight
-        return CGSize(width: maxWidth, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX && x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+            Spacer(minLength: 0)
         }
     }
 }

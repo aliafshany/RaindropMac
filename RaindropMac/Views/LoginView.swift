@@ -1,5 +1,5 @@
 // LoginView.swift
-// Beautiful login screen with Raindrop.io OAuth
+// Modern login screen with Raindrop.io OAuth
 
 import SwiftUI
 
@@ -7,147 +7,185 @@ struct LoginView: View {
     @EnvironmentObject var authService: AuthService
     @State private var isHoveringButton = false
     @State private var animateIn = false
+    @State private var pulse = false
 
     var body: some View {
         ZStack {
-            // Gradient background
+            // Layered gradient
             LinearGradient(
                 colors: [
-                    Color(red: 0.05, green: 0.05, blue: 0.15),
-                    Color(red: 0.08, green: 0.12, blue: 0.28),
-                    Color(red: 0.03, green: 0.18, blue: 0.38)
+                    Color(red: 0.04, green: 0.05, blue: 0.12),
+                    Color(red: 0.06, green: 0.10, blue: 0.24),
+                    Color(red: 0.04, green: 0.14, blue: 0.28)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
 
-            // Floating orbs
+            // Ambient orbs
             GeometryReader { geo in
                 Circle()
-                    .fill(Color.blue.opacity(0.15))
-                    .frame(width: 350, height: 350)
-                    .blur(radius: 80)
-                    .offset(x: -80, y: geo.size.height * 0.1)
+                    .fill(Theme.accent.opacity(0.22))
+                    .frame(width: 380, height: 380)
+                    .blur(radius: 90)
+                    .offset(x: -100, y: geo.size.height * 0.05)
+                    .scaleEffect(pulse ? 1.08 : 0.95)
 
                 Circle()
-                    .fill(Color.purple.opacity(0.12))
-                    .frame(width: 280, height: 280)
-                    .blur(radius: 60)
-                    .offset(x: geo.size.width - 150, y: geo.size.height * 0.5)
+                    .fill(Color.purple.opacity(0.18))
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 70)
+                    .offset(x: geo.size.width - 160, y: geo.size.height * 0.55)
+                    .scaleEffect(pulse ? 0.95 : 1.08)
+
+                Circle()
+                    .fill(Color.cyan.opacity(0.1))
+                    .frame(width: 200, height: 200)
+                    .blur(radius: 50)
+                    .offset(x: geo.size.width * 0.4, y: geo.size.height * 0.75)
             }
 
             VStack(spacing: 0) {
                 Spacer()
 
-                // Logo + Title
-                VStack(spacing: 20) {
+                VStack(spacing: 22) {
                     ZStack {
                         Circle()
                             .fill(
                                 LinearGradient(
-                                    colors: [Color(red: 0.0, green: 0.5, blue: 1.0), Color(red: 0.3, green: 0.0, blue: 0.9)],
+                                    colors: [Theme.accent, Theme.accentSecondary],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 88, height: 88)
-                            .shadow(color: .blue.opacity(0.5), radius: 20)
+                            .frame(width: 96, height: 96)
+                            .shadow(color: Theme.accent.opacity(0.55), radius: 28, y: 8)
 
-                        Image(systemName: "bookmark.fill")
-                            .font(.system(size: 38, weight: .semibold))
+                        Image(systemName: "drop.fill")
+                            .font(.system(size: 40, weight: .semibold))
                             .foregroundStyle(.white)
+                            .rotationEffect(.degrees(-15))
                     }
-                    .scaleEffect(animateIn ? 1.0 : 0.6)
+                    .scaleEffect(animateIn ? 1.0 : 0.55)
                     .opacity(animateIn ? 1 : 0)
 
-                    VStack(spacing: 8) {
+                    VStack(spacing: 10) {
                         Text("Raindrop")
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
+                            .font(.system(size: 44, weight: .bold, design: .rounded))
                             .foregroundStyle(
                                 LinearGradient(
-                                    colors: [.white, Color(white: 0.8)],
-                                    startPoint: .top, endPoint: .bottom
+                                    colors: [.white, Color.white.opacity(0.82)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
                                 )
                             )
 
-                        Text("Your bookmarks, beautifully organized.")
-                            .font(.system(size: 15, weight: .regular, design: .rounded))
+                        Text("Native bookmark manager for macOS")
+                            .font(.system(size: 15, weight: .medium, design: .rounded))
                             .foregroundStyle(.white.opacity(0.55))
                     }
-                    .offset(y: animateIn ? 0 : 20)
+                    .offset(y: animateIn ? 0 : 18)
                     .opacity(animateIn ? 1 : 0)
                 }
 
-                Spacer().frame(height: 52)
+                // Feature pills
+                HStack(spacing: 10) {
+                    featurePill("Collections", icon: "folder.fill")
+                    featurePill("Tags", icon: "tag.fill")
+                    featurePill("Full search", icon: "magnifyingglass")
+                }
+                .padding(.top, 28)
+                .opacity(animateIn ? 1 : 0)
+                .offset(y: animateIn ? 0 : 12)
 
-                // Login button
+                Spacer().frame(height: 48)
+
                 Button {
                     authService.startOAuth()
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "person.badge.key.fill")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                         Text("Sign in with Raindrop.io")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 36)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 15)
                     .background(
                         ZStack {
                             LinearGradient(
-                                colors: [Color(red: 0.0, green: 0.49, blue: 0.98), Color(red: 0.2, green: 0.3, blue: 0.95)],
+                                colors: [Theme.accent, Theme.accentSecondary],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                             if isHoveringButton {
-                                Color.white.opacity(0.08)
+                                Color.white.opacity(0.1)
                             }
                         }
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(color: .blue.opacity(isHoveringButton ? 0.7 : 0.4), radius: isHoveringButton ? 20 : 12)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: Theme.accent.opacity(isHoveringButton ? 0.65 : 0.4), radius: isHoveringButton ? 22 : 14, y: 6)
                     .scaleEffect(isHoveringButton ? 1.03 : 1.0)
                 }
                 .buttonStyle(.plain)
                 .disabled(authService.clientID.isEmpty)
                 .onHover { hovering in
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
                         isHoveringButton = hovering
                     }
                 }
-                .offset(y: animateIn ? 0 : 30)
+                .offset(y: animateIn ? 0 : 24)
                 .opacity(animateIn ? 1 : 0)
 
-                Spacer().frame(height: 28)
+                Spacer().frame(height: 24)
 
-                if authService.clientID.isEmpty {
-                    VStack(spacing: 4) {
-                        Text("API Credentials missing.")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.orange)
-                        Text("Press ⌘, (Command + Comma) to open Settings and configure.")
-                            .font(.system(size: 12, weight: .regular, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.5))
+                Group {
+                    if authService.clientID.isEmpty {
+                        VStack(spacing: 6) {
+                            Label("API credentials required", systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.orange)
+                            Text("Press ⌘, to open Settings and paste your Client ID & Secret.")
+                                .font(.system(size: 12, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                    } else {
+                        Text("Secure OAuth · Your data stays on Raindrop.io")
+                            .font(.system(size: 12, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.35))
                     }
-                    .opacity(animateIn ? 1 : 0)
-                } else {
-                    Text("You'll be redirected to Raindrop.io to sign in securely.")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.35))
-                        .opacity(animateIn ? 1 : 0)
                 }
+                .opacity(animateIn ? 1 : 0)
 
                 Spacer()
             }
-            .padding(.horizontal, 60)
+            .padding(.horizontal, 48)
         }
-        .frame(minWidth: 480, minHeight: 400)
+        .frame(minWidth: 520, minHeight: 460)
         .onAppear {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.75).delay(0.1)) {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.78).delay(0.08)) {
                 animateIn = true
             }
+            withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
         }
+    }
+
+    private func featurePill(_ title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+        }
+        .foregroundStyle(.white.opacity(0.7))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(.white.opacity(0.08))
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.1), lineWidth: 1))
     }
 }

@@ -21,6 +21,10 @@
 		AA000012 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* AppViewModel.swift */; };
 		AA000013 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA100014 /* Assets.xcassets */; };
 		AA000014 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AA100015 /* AppIcon.icns */; };
+		AA000015 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100016 /* Theme.swift */; };
+		AA000016 /* StellaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100017 /* StellaService.swift */; };
+		AA000017 /* StellaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100018 /* StellaView.swift */; };
+		AA000018 /* StellaWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100019 /* StellaWebView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +43,10 @@
 		AA100013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA100014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA100015 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		AA100016 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		AA100017 /* StellaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StellaService.swift; sourceTree = "<group>"; };
+		AA100018 /* StellaView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StellaView.swift; sourceTree = "<group>"; };
+		AA100019 /* StellaWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StellaWebView.swift; sourceTree = "<group>"; };
 		AAPROD001 /* RaindropMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RaindropMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -72,8 +80,17 @@
 				AAGRP003 /* ViewModels */,
 				AAGRP004 /* Models */,
 				AAGRP005 /* Services */,
+				AAGRP006 /* Utils */,
 			);
 			path = RaindropMac;
+			sourceTree = "<group>";
+		};
+		AAGRP006 /* Utils */ = {
+			isa = PBXGroup;
+			children = (
+				AA100016 /* Theme.swift */,
+			);
+			path = Utils;
 			sourceTree = "<group>";
 		};
 		AAGRP002 /* Views */ = {
@@ -86,6 +103,8 @@
 				AA100006 /* RaindropsListView.swift */,
 				AA100007 /* RaindropDetailView.swift */,
 				AA100008 /* AddRaindropView.swift */,
+				AA100018 /* StellaView.swift */,
+				AA100019 /* StellaWebView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -111,6 +130,7 @@
 			children = (
 				AA100010 /* AuthService.swift */,
 				AA100011 /* APIService.swift */,
+				AA100017 /* StellaService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -205,6 +225,10 @@
 				AA000010 /* AuthService.swift in Sources */,
 				AA000011 /* APIService.swift in Sources */,
 				AA000012 /* AppViewModel.swift in Sources */,
+				AA000015 /* Theme.swift in Sources */,
+				AA000016 /* StellaService.swift in Sources */,
+				AA000017 /* StellaView.swift in Sources */,
+				AA000018 /* StellaWebView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

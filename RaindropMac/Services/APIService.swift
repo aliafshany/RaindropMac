@@ -8,6 +8,7 @@ enum APIError: Error, LocalizedError {
     case invalidURL
     case decodingError(String)
     case networkError(String)
+    case serverError(String)
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,7 @@ enum APIError: Error, LocalizedError {
         case .invalidURL: return "Invalid URL."
         case .decodingError(let msg): return "Data error: \(msg)"
         case .networkError(let msg): return "Network error: \(msg)"
+        case .serverError(let msg): return msg
         }
     }
 }
@@ -41,31 +43,39 @@ class APIService {
         let request = try makeRequest(path, method: method, body: body)
         let (data, response) = try await URLSession.shared.data(for: request)
 
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
-            throw APIError.unauthorized
-        }
-
-        // Debug: print raw response
-        if let raw = String(data: data, encoding: .utf8) {
-            print("API [\(path)] response: \(String(raw.prefix(500)))")
+        if let httpResponse = response as? HTTPURLResponse {
+            if httpResponse.statusCode == 401 {
+                throw APIError.unauthorized
+            }
+            if httpResponse.statusCode == 429 {
+                throw APIError.serverError("Rate limit exceeded. Please wait a moment.")
+            }
+            if httpResponse.statusCode >= 400 {
+                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let msg = json["errorMessage"] as? String {
+                    throw APIError.serverError(msg)
+                }
+                throw APIError.serverError("Request failed (\(httpResponse.statusCode))")
+            }
         }
 
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch let decodingError as DecodingError {
-            // Print detailed decoding error
+            #if DEBUG
             switch decodingError {
             case .keyNotFound(let key, let ctx):
-                print("DECODE ERROR: Missing key '\(key.stringValue)' at \(ctx.codingPath.map(\.stringValue))")
+                print("DECODE: Missing key '\(key.stringValue)' at \(ctx.codingPath.map(\.stringValue))")
             case .typeMismatch(let type, let ctx):
-                print("DECODE ERROR: Type mismatch for \(type) at \(ctx.codingPath.map(\.stringValue))")
+                print("DECODE: Type mismatch \(type) at \(ctx.codingPath.map(\.stringValue))")
             case .valueNotFound(let type, let ctx):
-                print("DECODE ERROR: Value not found for \(type) at \(ctx.codingPath.map(\.stringValue))")
+                print("DECODE: Value not found \(type) at \(ctx.codingPath.map(\.stringValue))")
             case .dataCorrupted(let ctx):
-                print("DECODE ERROR: Data corrupted at \(ctx.codingPath.map(\.stringValue))")
+                print("DECODE: Corrupted at \(ctx.codingPath.map(\.stringValue))")
             @unknown default:
-                print("DECODE ERROR: \(decodingError)")
+                print("DECODE: \(decodingError)")
             }
+            #endif
             throw APIError.decodingError(decodingError.localizedDescription)
         } catch {
             throw APIError.decodingError(error.localizedDescription)
@@ -78,6 +88,11 @@ class APIService {
         return response.user
     }
 
+    func fetchStats() async throws -> [StatItem] {
+        let response: UserStatsResponse = try await fetch("/user/stats")
+        return response.items
+    }
+
     // MARK: - Collections
     func fetchCollections() async throws -> [RaindropCollection] {
         let response: CollectionsResponse = try await fetch("/collections")
@@ -85,72 +100,169 @@ class APIService {
         return response.items + children.items
     }
 
+    func createCollection(title: String, parentId: Int? = nil, isPublic: Bool = false, view: String = "list") async throws -> RaindropCollection {
+        var body: [String: Any] = [
+            "title": title,
+            "public": isPublic,
+            "view": view
+        ]
+        if let parentId {
+            body["parent"] = ["$id": parentId]
+        }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let response: CollectionItemResponse = try await fetch("/collection", method: "POST", body: data)
+        return response.item
+    }
+
+    func updateCollection(id: Int, title: String? = nil, isPublic: Bool? = nil, view: String? = nil, parentId: Int? = nil) async throws -> RaindropCollection {
+        var body: [String: Any] = [:]
+        if let title { body["title"] = title }
+        if let isPublic { body["public"] = isPublic }
+        if let view { body["view"] = view }
+        if let parentId { body["parent"] = ["$id": parentId] }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        let response: CollectionItemResponse = try await fetch("/collection/\(id)", method: "PUT", body: data)
+        return response.item
+    }
+
+    func deleteCollection(id: Int) async throws {
+        let _: DeleteResponse = try await fetch("/collection/\(id)", method: "DELETE")
+    }
+
+    func emptyTrash() async throws {
+        let _: DeleteResponse = try await fetch("/collection/-99", method: "DELETE")
+    }
+
     // MARK: - Raindrops
-    func fetchRaindrops(collectionId: Int, page: Int = 0, perPage: Int = 25) async throws -> RaindropsResponse {
-        return try await fetch("/raindrops/\(collectionId)?page=\(page)&perpage=\(perPage)")
+    func fetchRaindrops(
+        collectionId: Int,
+        page: Int = 0,
+        perPage: Int = 40,
+        sort: String = "-created",
+        search: String? = nil,
+        nested: Bool = true
+    ) async throws -> RaindropsResponse {
+        var query: [String] = [
+            "page=\(page)",
+            "perpage=\(min(perPage, 50))",
+            "sort=\(sort.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? sort)",
+            "nested=\(nested ? "true" : "false")"
+        ]
+        if let search, !search.isEmpty {
+            let encoded = search.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? search
+            query.append("search=\(encoded)")
+        }
+        return try await fetch("/raindrops/\(collectionId)?\(query.joined(separator: "&"))")
     }
 
-    func fetchAllRaindrops(page: Int = 0) async throws -> RaindropsResponse {
-        return try await fetch("/raindrops/0?page=\(page)&perpage=25")
+    func getRaindrop(id: Int) async throws -> Raindrop {
+        let response: CreateRaindropResponse = try await fetch("/raindrop/\(id)")
+        return response.item
     }
 
-    // MARK: - Search
-    func searchRaindrops(query: String, collectionId: Int = 0) async throws -> RaindropsResponse {
-        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query
-        return try await fetch("/raindrops/\(collectionId)?search=\(encoded)&perpage=25")
-    }
-
-    // MARK: - Tags
-    func fetchTags(collectionId: Int = 0) async throws -> [RaindropTag] {
-        let response: TagsResponse = try await fetch("/tags/\(collectionId)")
-        return response.items
-    }
-
-    // MARK: - Create Raindrop
-    func createRaindrop(link: String, title: String?, collectionId: Int, tags: [String]) async throws -> Raindrop {
+    func createRaindrop(
+        link: String,
+        title: String? = nil,
+        collectionId: Int = -1,
+        tags: [String] = [],
+        note: String? = nil,
+        excerpt: String? = nil,
+        important: Bool = false,
+        pleaseParse: Bool = true
+    ) async throws -> Raindrop {
         var body: [String: Any] = [
             "link": link,
-            "collectionId": collectionId,
-            "tags": tags
+            "collection": ["$id": collectionId],
+            "tags": tags,
+            "important": important
         ]
-        if let title = title { body["title"] = title }
+        if let title, !title.isEmpty { body["title"] = title }
+        if let note, !note.isEmpty { body["note"] = note }
+        if let excerpt, !excerpt.isEmpty { body["excerpt"] = excerpt }
+        if pleaseParse { body["pleaseParse"] = [:] }
 
         let data = try JSONSerialization.data(withJSONObject: body)
         let response: CreateRaindropResponse = try await fetch("/raindrop", method: "POST", body: data)
         return response.item
     }
 
-    // MARK: - Update Raindrop
-    func updateRaindrop(id: Int, link: String, title: String?, collectionId: Int, tags: [String]) async throws -> Raindrop {
-        var body: [String: Any] = [
-            "link": link,
-            "collectionId": collectionId,
-            "tags": tags
-        ]
-        if let title = title { body["title"] = title }
-        
+    func updateRaindrop(
+        id: Int,
+        link: String? = nil,
+        title: String? = nil,
+        collectionId: Int? = nil,
+        tags: [String]? = nil,
+        note: String? = nil,
+        excerpt: String? = nil,
+        important: Bool? = nil,
+        pleaseParse: Bool = false
+    ) async throws -> Raindrop {
+        var body: [String: Any] = [:]
+        if let link { body["link"] = link }
+        if let title { body["title"] = title }
+        if let collectionId { body["collection"] = ["$id": collectionId] }
+        if let tags { body["tags"] = tags }
+        if let note { body["note"] = note }
+        if let excerpt { body["excerpt"] = excerpt }
+        if let important { body["important"] = important }
+        if pleaseParse { body["pleaseParse"] = [:] }
+
         let data = try JSONSerialization.data(withJSONObject: body)
         let response: CreateRaindropResponse = try await fetch("/raindrop/\(id)", method: "PUT", body: data)
         return response.item
     }
 
-    // MARK: - Delete Raindrop
     func deleteRaindrop(id: Int) async throws {
         let _: DeleteResponse = try await fetch("/raindrop/\(id)", method: "DELETE")
     }
 
-    // MARK: - Favorite
-    func toggleFavorite(id: Int, important: Bool) async throws {
-        let body = try JSONSerialization.data(withJSONObject: ["important": important])
-        let _: CreateRaindropResponse = try await fetch("/raindrop/\(id)", method: "PUT", body: body)
+    func toggleFavorite(id: Int, important: Bool) async throws -> Raindrop {
+        try await updateRaindrop(id: id, important: important)
     }
-}
 
-struct CreateRaindropResponse: Codable {
-    let item: Raindrop
-    let result: Bool
-}
+    func moveRaindrop(id: Int, toCollectionId: Int) async throws -> Raindrop {
+        try await updateRaindrop(id: id, collectionId: toCollectionId)
+    }
 
-struct DeleteResponse: Codable {
-    let result: Bool
+    // MARK: - Suggest
+    func suggest(for link: String) async throws -> SuggestItem {
+        let data = try JSONSerialization.data(withJSONObject: ["link": link])
+        let response: SuggestResponse = try await fetch("/raindrop/suggest", method: "POST", body: data)
+        return response.item
+    }
+
+    // MARK: - Tags
+    func fetchTags(collectionId: Int = 0) async throws -> [RaindropTag] {
+        let response: TagsResponse = try await fetch("/tags/\(collectionId)")
+        return response.items.sorted { $0.count > $1.count }
+    }
+
+    func renameTag(old: String, new: String, collectionId: Int = 0) async throws {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "replace": new,
+            "tags": [old]
+        ])
+        let _: DeleteResponse = try await fetch("/tags/\(collectionId)", method: "PUT", body: body)
+    }
+
+    func deleteTags(_ tags: [String], collectionId: Int = 0) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["tags": tags])
+        var request = try makeRequest("/tags/\(collectionId)", method: "DELETE", body: body)
+        // DELETE with body
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode == 401 {
+            throw APIError.unauthorized
+        }
+        _ = data
+    }
+
+    // MARK: - Filters
+    func fetchFilters(collectionId: Int = 0, search: String? = nil) async throws -> FiltersResponse {
+        var path = "/filters/\(collectionId)"
+        if let search, !search.isEmpty {
+            let encoded = search.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? search
+            path += "?search=\(encoded)"
+        }
+        return try await fetch(path)
+    }
 }

@@ -47,3 +47,7 @@ InjectionProject/
 # User-specific backups
 *.backup
 *.bak
+
+# Distribution / packaging
+*.dmg
+dmg_root/

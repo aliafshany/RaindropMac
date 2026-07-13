@@ -16,6 +16,7 @@ struct ContentView: View {
                 LoginView()
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: authService.isAuthenticated)
+        .animation(.easeInOut(duration: 0.35), value: authService.isAuthenticated)
+        .frame(minWidth: 900, minHeight: 560)
     }
 }
